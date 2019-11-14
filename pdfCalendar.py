@@ -1,98 +1,79 @@
-from reportlab.lib.pagesizes import A4, cm
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm 
 from reportlab.platypus import  Table, TableStyle, Paragraph
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_CENTER
+
+
+
 import os
+import datetime
+from calendar import monthrange
+import calendar
 
+###########################################################################################
 
-monthSize = (0.7 * cm, 0.7 * cm)
-
-xx = []
-
-MonthNumDays = [31,28,31,30,31,30,31,31,30,31,30,31]
-width, height = A4
+individualDateTextBoxSize = (0.7 * cm, 0.7 * cm)
+monthPositions = []
 days = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
-MonthNames = ["January", "February", "March", "April", "May", "June","July", "August", "September", "October", "November", "December"]
 
-
-def zeller( day, month, year):
-	temp = 0 
-	yr1 = 0 
-	yr2 = 0
-	if month < 3:
-		month += 10
-		year -= 1
-	else:
-		month -=2
-
-	yr1 = year/100
-	yr2 = year % 100
-	temp = (26 * month - 1 ) / 10
-	return( (day + temp + yr2 + yr2/4 + yr1/4 - 2*yr1 + 49) % 7 )
-
-
-# Positions for all the months
+# Positions for all the months from the left edge and the top edge, in cm
 def setMonthPositions():
+	letftMargin = 2.0  * cm 
+
+	verticalGap = (21 * cm  - letftMargin * 2 - individualDateTextBoxSize[0] * 7  )  /  2
+	#	leftMargin = ( width - individualDateTextBoxSize[0] * 3 + verticalGap ) / 2 
 	row = 0
-	for x in xrange(0,12):
+	for x in range(0,12):
 		if x % 3 == 0:
 			row += 1
 		
-		xx.append( (1.2 + (x % 3) * 6.5, row * 6.5 + 2) )
-
-def fillYearTitle(year, canvas):
-	textobject = canvas.beginText()
-	textobject.setTextOrigin( 10 * cm,  height - 1 * cm )
-	textobject.setFont("Helvetica", 14)
-	textobject.textOut(str(year))
-	canvas.drawText(textobject)
+		monthPositions.append( ( letftMargin + (x % 3 ) * verticalGap, row * 6.5 * cm + 2 * cm ) )
 
 
 def fillMonthNames(canvas):
-	for x in xrange(0,12):
+	for x in range(0,12):
 		textobject = canvas.beginText()
-		textobject.setTextOrigin( xx[x][0] * cm, 7 * monthSize[0] + height - xx[x][1] * cm )
+		textobject.setTextOrigin( monthPositions[x][0] , 7 * individualDateTextBoxSize[0] + A4[1] - monthPositions[x][1]  )
 		textobject.setFont("Helvetica", 14)
-		textobject.textOut(MonthNames[x])
+		textobject.textOut(calendar.month_name[x + 1])
 		canvas.drawText(textobject)
  
 def coord(x, y, unit=1):
-    x, y = x * unit, height -  y * unit
+    x, y = x * unit, A4[1] -  y * unit
     return x, y
 
-def printMonth(month, year, x, y):
-	data= []
-	data.insert(0,days)       
-	d = []
+def printMonth(month, year, x, y, myCanvas):
+	monthMatrix= []
+	monthMatrix.insert(0,days)  
+     
+	oneWeekArray = []
 
-	total_days = MonthNumDays[month]
-	if ((month == 1) and (year % 4 == 0) and (year % 400 != 0)):
- 		total_days += 1      # for leap years, february has one extra day 
+	total_days = monthrange(year, month + 1)[1]
+	weekStarts = monthrange(year, month + 1)[0]
 
 	date = 0
-	weekStarts = zeller(1, month + 1, year) - 1   
-	if weekStarts == -1:
-		weekStarts = 6
 
+	#This starts filling out the actual date numerals into an array . This is simply the actual numerals, no sense of spcing eytc. That comes later at printing time.	
 	weekStartpadding = 0
-	for i in range(0,6):
-		d = []
-		for kount in xrange(1,8):
+	for _  in range(0,6):
+		oneWeekArray = []
+		for _ in range(1,8):
 			weekStartpadding += 1
 			if weekStartpadding <= weekStarts:
-				d.append(' ')
+				oneWeekArray.append(' ')
 			else:
 				date = date + 1
 				if date > total_days :
 					break
-				d.append(date)
+				oneWeekArray.append(date)
 		
-		data.append(d)	
+		monthMatrix.append(oneWeekArray)	# this is collecting the full month, which will be printed.
 
 	
-	t=Table(data,7*[monthSize[0]], 7*[monthSize[1]], hAlign='LEFT')
+	t = Table(monthMatrix, 7*[individualDateTextBoxSize[0]], 7*[individualDateTextBoxSize[1]], hAlign='LEFT')   # data now goes into a table, ready for printing. This is where we set alignment etc.
 	t.setStyle(TableStyle([
 	                       	('TEXTCOLOR',(0,0),(-1,0),colors.red),
 	                       	('TEXTCOLOR',(-1,-1),(0,-1),colors.blue),
@@ -105,26 +86,30 @@ def printMonth(month, year, x, y):
 
 	                       ]))
 
-	t.wrapOn(c, width, height)
-	t.drawOn(c, *coord(x, y, cm))
+	t.wrapOn(myCanvas, A4[0], A4[1])
+	t.drawOn(myCanvas, *coord(x, y, 1))
 
 
 ###############################################################
 
+def makeYear(year, saveName):
 
-saveName = "calendar.pdf"
-c = canvas.Canvas(saveName, pagesize=A4)
+	# saveName = "calendar3.pdf"
+	myCanvas = canvas.Canvas(saveName, pagesize=A4)
 
-row = 0
-setMonthPositions()
-year = 2018
-for x in xrange(0,12):
-	if x % 3 == 0:
-		row += 1
-	printMonth(x,year, xx[x][0], xx[x][1] )
-fillYearTitle(year, c)
-fillMonthNames(c)
-c.save()
+	row = 0
+	setMonthPositions()
+	# year = 2019
+	for x in range(0,12):
+		if x % 3 == 0:
+			row += 1
+		printMonth(x,year, monthPositions[x][0], monthPositions[x][1], myCanvas )
+	myCanvas.setFont( 'Helvetica', 16 )	
+	myCanvas.drawCentredString(A4[0] / 2 ,  A4[1] - 1.5 * cm, str(year))
+	fillMonthNames(myCanvas)
+	myCanvas.save()
 
 
+#################################################################
 
+makeYear(2020, "calendar2020.pdf")
